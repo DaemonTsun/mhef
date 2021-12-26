@@ -49,7 +49,7 @@ MH4G_SD_QUEST = 2
 class SavedataCipher:
     def __init__(self, game):
         if game in (MH4G_JP, MH4G_NA, MH4G_EU, MH4G_KR, MH4G_TW):
-            self._cipher = Blowfish.new(b'blowfish key iorajegqmrna4itjeangmb agmwgtobjteowhv9mope')
+            self._cipher = Blowfish.new(b'blowfish key iorajegqmrna4itjeangmb agmwgtobjteowhv9mope', Blowfish.MODE_ECB)
         elif game == MH4_JP:
             self._cipher = None
         else:
@@ -62,25 +62,25 @@ class SavedataCipher:
                 key = 1
             key = key * 0xb0 % 0xff53
             buff[i] ^= key
-        return buff.tostring()
+        return buff.tobytes()
 
     def encrypt(self, buff, type=MH4G_SD_NORMAL):
         csum = sum(bytearray(buff)) & 0xffffffff
         buff = array.array('I', buff)
         buff.insert(0, csum)
         seed = random.getrandbits(16)
-        buff = array.array('I', self._xor(buff.tostring(), seed))
+        buff = array.array('I', self._xor(buff.tobytes(), seed))
         buff.insert(0, (seed << 16) + 0x10)
         header = buff[:6]
         if type == MH4G_SD_CARD:
             buff = buff[6:]
         if self._cipher:
             buff.byteswap()
-            buff = array.array('I', self._cipher.encrypt(buff.tostring()))
+            buff = array.array('I', self._cipher.encrypt(buff.tobytes()))
             buff.byteswap()
         if type == MH4G_SD_CARD:
             buff = header + buff
-        buff = buff.tostring()
+        buff = buff.tobytes()
         if type == MH4G_SD_QUEST:
             buff += b'\x00' * 0x100
         return buff
@@ -94,14 +94,14 @@ class SavedataCipher:
             buff = buff[6:]
         if self._cipher:
             buff.byteswap()
-            buff = array.array('I', self._cipher.decrypt(buff.tostring()))
+            buff = array.array('I', self._cipher.decrypt(buff.tobytes()))
             buff.byteswap()
         if type == MH4G_SD_CARD:
             buff = header + buff
         seed = buff.pop(0) >> 16
-        buff = array.array('I', self._xor(buff.tostring(), seed))
+        buff = array.array('I', self._xor(buff.tobytes(), seed))
         csum = buff.pop(0)
-        buff = buff.tostring()
+        buff = buff.tobytes()
         if csum != (sum(bytearray(buff)) & 0xffffffff):
             raise ValueError('Invalid checksum in header.')
         return buff
@@ -120,13 +120,13 @@ class SavedataCipher:
 class DLCCipher:
     def __init__(self, game):
         if game == MH4G_NA or game == MH4G_EU:
-            self._cipher = Blowfish.new(b'AgK2DYheaCjyHGPB')
+            self._cipher = Blowfish.new(b'AgK2DYheaCjyHGPB', Blowfish.MODE_ECB)
         elif game == MH4G_JP:
-            self._cipher = Blowfish.new(b'AgK2DYheaCjyHGP8')
+            self._cipher = Blowfish.new(b'AgK2DYheaCjyHGP8', Blowfish.MODE_ECB)
         elif game == MH4G_KR:
-            self._cipher = Blowfish.new(b'AgK2DYheaOjyHGP8')
+            self._cipher = Blowfish.new(b'AgK2DYheaOjyHGP8', Blowfish.MODE_ECB)
         elif game == MH4G_TW:
-            self._cipher = Blowfish.new(b'Capcom123 ')
+            self._cipher = Blowfish.new(b'Capcom123 ', Blowfish.MODE_ECB)
         else:
             raise ValueError('Invalid game selected.')
 
@@ -137,10 +137,10 @@ class DLCCipher:
             buff += b'\x00' * (8 - len(buff) % 8)
         buff = array.array('I', buff)
         buff.byteswap()
-        buff = array.array('I', self._cipher.encrypt(buff.tostring()))
+        buff = array.array('I', self._cipher.encrypt(buff.tobytes()))
         buff.append(size)
         buff.byteswap()
-        return buff.tostring()
+        return buff.tobytes()
 
     def decrypt(self, buff):
         buff = array.array('I', buff)
@@ -148,9 +148,9 @@ class DLCCipher:
         size = buff.pop()
         if size > len(buff) * 4:
             raise ValueError('Invalid file size in footer.')
-        buff = array.array('I', self._cipher.decrypt(buff.tostring()))
+        buff = array.array('I', self._cipher.decrypt(buff.tobytes()))
         buff.byteswap()
-        buff = buff.tostring()[:size]
+        buff = buff.tobytes()[:size]
         md = buff[-20:]
         buff = buff[:-20]
         if md != hashlib.sha1(buff).digest():
@@ -187,13 +187,13 @@ class DLCXCipher:
         length = len(buff)
         buff = array.array('I', buff + b'\x00' * (8 - length % 8))
         buff.byteswap()
-        counter = Counter.new(32, prefix=nonce.tostring(), initial_value=0, little_endian=True)
+        counter = Counter.new(32, prefix=nonce.tobytes(), initial_value=0, little_endian=True)
         cipher = Blowfish.new(self._key, Blowfish.MODE_CTR, counter=counter)
-        buff = array.array('I', cipher.encrypt(buff.tostring()))
+        buff = array.array('I', cipher.encrypt(buff.tobytes()))
         buff.byteswap()
-        buff = buff.tostring()[:length]
+        buff = buff.tobytes()[:length]
         nonce.byteswap()
-        return buff + nonce.tostring() + b'\x00' * 0x200
+        return buff + nonce.tobytes() + b'\x00' * 0x200
 
     def decrypt(self, buff):
         md = SHA256.new(buff[:-0x100])
@@ -211,11 +211,11 @@ class DLCXCipher:
         length = len(buff) - 4
         buff = array.array('I', buff[:-4] + b'\x00' * (8 - length % 8))
         buff.byteswap()
-        counter = Counter.new(32, prefix=nonce.tostring(), initial_value=0, little_endian=True)
+        counter = Counter.new(32, prefix=nonce.tobytes(), initial_value=0, little_endian=True)
         cipher = Blowfish.new(self._key, Blowfish.MODE_CTR, counter=counter)
-        buff = array.array('I', cipher.decrypt(buff.tostring()))
+        buff = array.array('I', cipher.decrypt(buff.tobytes()))
         buff.byteswap()
-        buff = buff.tostring()[:length]
+        buff = buff.tobytes()[:length]
         md = buff[-20:]
         buff = buff[:-20]
         if md != hashlib.sha1(buff).digest():

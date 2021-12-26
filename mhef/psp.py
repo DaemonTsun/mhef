@@ -178,7 +178,7 @@ class DataCipher:
         # Apply an XOR cipher to the data using a new key every 4 bytes
         for i in range(len(buff)):
             buff[i] ^= self._next_key()
-        return buff.tostring()
+        return buff.tobytes()
 
     def encrypt_file(self, data_file, out_file):
         """
